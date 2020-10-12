@@ -1,27 +1,113 @@
-version: "3.7"
+version: '2.4'
+
 services:
-  app:
-    container_name: app
-    build:
-      context: .
-      args:
+
+  users-db:
+    container_name: users-db
+    restart: on-failure
+    image: postgres:latest
+    ports:
+      - '5433:5432' 
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=users_dev
+    healthcheck:
+      test: exit 0
+    networks:
+      - project_network
+
+  movies-db:
+    container_name: movies-db
+    restart: on-failure
+    image: postgres:latest
+    ports:
+      - '5434:5432' 
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=movies_dev
+    healthcheck:
+      test: exit 0
+    networks:
+      - project_network
+
+  users-service:
+    container_name: users-service
+    restart: on-failure
+    build: 
+       context: ./services/users/
+       args:
         NODE_VERSION: ${NODE_VERSION}
-      target: ${APP_ENV}
-    restart: on-failure
-    ports:
-      - "${PORT}:4000"
     volumes:
-      - .:/app
-      - /app/node_modules
+      - './services/users:/usr/src/app'
+      - './services/users/package.json:/usr/src/package.json'
+    ports:
+      - '${USERS_SERVICE_PORT}:3000' 
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@users-db:5432/users_dev
+      - DATABASE_TEST_URL=postgres://postgres:postgres@users-db:5432/users_test
+      - NODE_ENV=${NODE_ENV}
+      - TOKEN_SECRET=changeme
     depends_on:
-      - mongo
-    env_file:
-      - .env
-  mongo:
-    container_name: mongo
-    image: mongo:${MONGO_VERSION}
+      users-db:
+        condition: service_healthy
+    links:
+      - users-db
+    networks:
+      - project_network
+
+  movies-service:
+    container_name: movies-service
     restart: on-failure
-    ports:
-      - "${MONGO_PORT}:27017"
+    build: 
+       context: ./services/movies/
+       args:
+        NODE_VERSION: ${NODE_VERSION}
     volumes:
-      - ./src/db:/data/db
+      - './services/users:/usr/src/app'
+      - './services/users/package.json:/usr/src/package.json'
+    ports:
+      - '${MOVIES_SERVICE_PORT}:3000' 
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@movies-db:5432/movies_dev
+      - DATABASE_TEST_URL=postgres://postgres:postgres@movies-db:5432/movies_test
+      - NODE_ENV=${NODE_ENV}
+      - TOKEN_SECRET=changeme
+    depends_on:
+      movies-db:
+        condition: service_healthy
+      users-service:
+        condition: service_started
+    links:
+      - movies-db
+      - users-service
+    networks:
+      - project_network
+      
+  swagger:
+    container_name: swagger
+    restart: on-failure
+    build: ./services/movies/swagger/
+    volumes:
+      - './services/movies/swagger:/usr/src/app'
+      - '/usr/src/app/node_modules'
+    ports:
+      - '3003:3001' # expose ports - HOST:CONTAINER
+    environment:
+      - NODE_ENV=${NODE_ENV}
+    depends_on:
+      users-service:
+        condition: service_started
+      movies-service:
+        condition: service_started
+    links:
+      - users-service
+      - movies-service    
+    networks:
+      - project_network
+      
+networks:
+  project_network:
+    external: true
+

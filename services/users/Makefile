@@ -8,19 +8,17 @@ help: ## This help.
 
 .DEFAULT_GOAL := help
 
-
-.PHONY: help commit build run stop destroy 
-
+.PHONY: help build run stop destroy
 
 # DOCKER TASKS
 build: ## build the project image.     
-		@docker-compose build --build-arg NODE_VERSION=${NODE_VERSION}
- 
-
+	@docker build -t $(APP_IMAGE_NAME) --rm .\
+        --build-arg NODE_VERSION=${NODE_VERSION} \
+        
 
 
 run: ## Run an already built project
-	@COMPOSE_HTTP_TIMEOUT=200 docker-compose up -d
+	@docker-compose up -d
 
 stop: ## Stop an already running project
 	@docker-compose stop
@@ -28,4 +26,3 @@ stop: ## Stop an already running project
 destroy: ## Destroy an already built project
 	@docker-compose down
 	@docker-compose rm -f
-
